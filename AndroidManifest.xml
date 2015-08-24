@@ -25,7 +25,7 @@
 
     <original-package android:name="com.android.launcher3" />
 
-    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="16" />
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="21" />
 
     <permission
         android:name="com.android.launcher.permission.INSTALL_SHORTCUT"
@@ -216,6 +216,12 @@
         <receiver android:name="com.android.launcher3.StartupReceiver" >
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name="com.android.launcher3.ThemeChangedReceiver" >
+            <intent-filter>
+                <action android:name="org.cyanogenmod.intent.action.THEME_CHANGED"/>
             </intent-filter>
         </receiver>
 

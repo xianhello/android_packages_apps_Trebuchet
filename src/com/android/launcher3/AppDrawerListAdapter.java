@@ -16,20 +16,24 @@
 
 package com.android.launcher3;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.provider.Settings;
+import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.support.v7.widget.RecyclerView;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SectionIndexer;
 import com.android.launcher3.locale.LocaleSetManager;
@@ -49,14 +53,30 @@ import java.util.List;
 public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdapter.ViewHolder>
         implements View.OnLongClickListener, DragSource, SectionIndexer {
 
+    private static final String TAG = AppDrawerListAdapter.class.getSimpleName();
     private static final String NUMERIC_OR_SPECIAL_HEADER = "#";
+
+    /**
+     * Tracks both the section index and the positional item index for the sections
+     * section:     0 0 0 1 1 2 3 4 4
+     * itemIndex:   0 1 2 3 4 5 6 7 8
+     * Sections:    A A A B B C D E E
+     */
+    private static class SectionIndices {
+        public int mSectionIndex;
+        public int mItemIndex;
+        public SectionIndices(int sectionIndex, int itemIndex) {
+            mSectionIndex = sectionIndex;
+            mItemIndex = itemIndex;
+        }
+    }
 
     private ArrayList<AppItemIndexedInfo> mHeaderList;
     private LayoutInflater mLayoutInflater;
 
     private Launcher mLauncher;
     private DeviceProfile mDeviceProfile;
-    private LinkedHashMap<String, Integer> mSectionHeaders;
+    private LinkedHashMap<String, SectionIndices> mSectionHeaders;
     private LinearLayout.LayoutParams mIconParams;
     private Rect mIconRect;
     private LocaleSetManager mLocaleSetManager;
@@ -93,12 +113,17 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
     public static class ViewHolder extends RecyclerView.ViewHolder {
         public AutoFitTextView mTextView;
         public ViewGroup mLayout;
-        public View mFadingBackground;
+        public View mContainerView;
+        public View mFadingBackgroundBackView;
+        public View mFadingBackgroundFrontView;
         public ViewHolder(View itemView) {
             super(itemView);
+            mContainerView = itemView;
+            mFadingBackgroundBackView = itemView.findViewById(R.id.fading_background_back);
+            mFadingBackgroundFrontView = itemView.findViewById(R.id.fading_background_front);
             mTextView = (AutoFitTextView) itemView.findViewById(R.id.drawer_item_title);
+            mTextView.bringToFront();
             mLayout = (ViewGroup) itemView.findViewById(R.id.drawer_item_flow);
-            mFadingBackground = itemView.findViewById(R.id.fading_background);
         }
     }
 
@@ -111,6 +136,7 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         private static final float MAX_SCALE = 2f;
         private static final float MIN_SCALE = 1f;
         private static final float FAST_SCROLL = 0.3f;
+        private static final int NO_SECTION_TARGET = -1;
 
         private final float YDPI;
         private final HashSet<ViewHolder> mViewHolderSet;
@@ -125,20 +151,26 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         private float mFastScrollSpeed;
         private float mLastScrollSpeed;
 
+        // If the user is scrubbing, we want to highlight the target section differently,
+        // so we use this to track where the user is currently scrubbing to
+        private int mSectionTarget;
+
         public ItemAnimatorSet(Context ctx) {
             mDragging = false;
             mExpanding = false;
             mPendingShrink = false;
             mScrollState = RecyclerView.SCROLL_STATE_IDLE;
+            mSectionTarget = NO_SECTION_TARGET;
             mViewHolderSet = new HashSet<>();
             mInterpolator = new DecelerateInterpolator();
             YDPI = ctx.getResources().getDisplayMetrics().ydpi;
+
             mLayoutChangeListener = new View.OnLayoutChangeListener() {
                 @Override
                 public void onLayoutChange(View v, int left, int top, int right, int bottom,
                                            int oldLeft, int oldTop, int oldRight, int oldBottom) {
                     // set the pivot of the text view
-                    v.setPivotX(v.getMeasuredWidth() / 4);
+                    v.setPivotX(v.getMeasuredWidth() / 3);
                     v.setPivotY(v.getMeasuredHeight() / 2);
                 }
             };
@@ -161,6 +193,12 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
                 mScrollState = newState;
                 mFastScrollSpeed = 0;
                 checkAnimationState();
+
+                // If the user is dragging, clear the section target
+                if (mScrollState == RecyclerView.SCROLL_STATE_DRAGGING
+                        && mSectionTarget != NO_SECTION_TARGET) {
+                    setSectionTarget(NO_SECTION_TARGET);
+                }
             }
         }
 
@@ -211,32 +249,35 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
             }
         }
 
-        public void createAnimationHook(ViewHolder holder) {
+        public void createAnimationHook(final ViewHolder holder) {
             holder.mTextView.animate().cancel();
             holder.mTextView.animate()
                     .setUpdateListener(new ItemAnimator(holder, mItemAnimatorSet))
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(final Animator animation) {
+                            animateEnd(holder, animation);
+                        }
+                    })
                     .setDuration(ANIMATION_DURATION)
                     .start();
         }
 
-        public void animate(ViewHolder holder, ValueAnimator animation) {
+        public void animateEnd(ViewHolder holder, Animator animation) {
+            animate(holder, animation, 1f);
+        }
+
+        public void animate(ViewHolder holder, Animator animation) {
             long diffTime = System.currentTimeMillis() - mStartTime;
 
             float percentage = Math.min(diffTime / (float) ANIMATION_DURATION, 1f);
-            percentage = mInterpolator.getInterpolation(percentage);
 
-            if (!mExpanding) {
-                percentage = 1 - percentage;
-            }
-
-            final float targetScale = (MAX_SCALE - MIN_SCALE) * percentage + MIN_SCALE;
-            holder.mTextView.setScaleX(targetScale);
-            holder.mTextView.setScaleY(targetScale);
-
-            holder.mFadingBackground.setAlpha(percentage);
+            animate(holder, animation, percentage);
 
             if (diffTime >= ANIMATION_DURATION) {
-                animation.cancel();
+                if (animation != null) {
+                    animation.cancel();
+                }
 
                 if (mPendingShrink) {
                     mPendingShrink = false;
@@ -246,9 +287,44 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
 
             }
         }
+
+        public void animate(ViewHolder holder, Animator animation, float percentage) {
+            percentage = mInterpolator.getInterpolation(percentage);
+
+            if (!mExpanding) {
+                percentage = 1 - percentage;
+            }
+
+            // Scale header text letters
+            final float targetScale = (MAX_SCALE - MIN_SCALE) * percentage + MIN_SCALE;
+            holder.mTextView.setScaleX(targetScale);
+            holder.mTextView.setScaleY(targetScale);
+
+            // Perform animation
+            if (getSectionForPosition(holder.getPosition()) == mSectionTarget) {
+                holder.mFadingBackgroundFrontView.setVisibility(View.INVISIBLE);
+                holder.mFadingBackgroundBackView.setAlpha(percentage);
+                holder.mFadingBackgroundBackView.setVisibility(View.VISIBLE);
+            } else {
+                holder.mFadingBackgroundBackView.setVisibility(View.INVISIBLE);
+                holder.mFadingBackgroundFrontView.setAlpha(percentage);
+                holder.mFadingBackgroundFrontView.setVisibility(View.VISIBLE);
+            }
+
+        }
+
+        /**
+         * Sets the section index to highlight different from the rest when scrubbing
+         */
+        public void setSectionTarget(int sectionIndex) {
+            mSectionTarget = sectionIndex;
+            for (ViewHolder holder : mViewHolderSet) {
+                animate(holder, null);
+            }
+        }
     }
 
-    private static class ItemAnimator implements ValueAnimator.AnimatorUpdateListener {
+    private class ItemAnimator implements ValueAnimator.AnimatorUpdateListener {
         private ViewHolder mViewHolder;
         private ItemAnimatorSet mAnimatorSet;
 
@@ -259,7 +335,7 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
 
         @Override
         public void onAnimationUpdate(ValueAnimator animation) {
-            mAnimatorSet.animate(mViewHolder, animation);
+            mItemAnimatorSet.animate(mViewHolder, animation);
         }
     }
 
@@ -289,12 +365,35 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         mItemAnimatorSet.setDragging(dragging);
     }
 
+    /**
+     * Sets the section index to highlight different from the rest when scrubbing
+     */
+    public void setSectionTarget(int sectionIndex) {
+        mItemAnimatorSet.setSectionTarget(sectionIndex);
+    }
+
     private void initParams() {
         mDeviceProfile = LauncherAppState.getInstance().getDynamicGrid().getDeviceProfile();
 
-        int width = mDeviceProfile.cellWidthPx + 2 * mDeviceProfile.edgeMarginPx;
+        int width = mDeviceProfile.allAppsIconSizePx + 2 * mDeviceProfile.edgeMarginPx;
+        int drawnWidth = (mDeviceProfile.allAppsCellWidthPx * mDeviceProfile.numColumnsBase) +
+                ((mDeviceProfile.edgeMarginPx * 2) * mDeviceProfile.numColumnsBase);
+
         mIconParams = new
                 LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+
+        boolean isLarge = SettingsProvider.getBoolean(mLauncher,
+                SettingsProvider.SETTINGS_UI_GENERAL_ICONS_LARGE,
+                R.bool.preferences_interface_general_icons_large_default);
+
+        if (!isLarge) {
+            mIconParams.setMarginStart(mDeviceProfile.edgeMarginPx);
+            mIconParams.setMarginEnd(mDeviceProfile.edgeMarginPx);
+        }
+
+        mIconParams.topMargin = mDeviceProfile.edgeMarginPx;
+        mIconParams.bottomMargin = mDeviceProfile.edgeMarginPx;
+        mIconParams.gravity = Gravity.CENTER;
         mIconRect = new Rect(0, 0, mDeviceProfile.allAppsIconSizePx,
                 mDeviceProfile.allAppsIconSizePx);
 
@@ -380,18 +479,15 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
 
     private void populateSectionHeaders() {
         if (mSectionHeaders == null || mSectionHeaders.size() != mHeaderList.size()) {
-            mSectionHeaders = new LinkedHashMap<String, Integer>();
+            mSectionHeaders = new LinkedHashMap<>();
         }
-        int count = 0;
+
+        int sectionIndex = 0;
         for (int i = 0; i < mHeaderList.size(); i++) {
-            AppItemIndexedInfo info = mHeaderList.get(i);
             if (!mHeaderList.get(i).isChild) {
-                mSectionHeaders.put(String.valueOf(mHeaderList.get(i).mStartString), count);
-            }
-            if (info.mInfo.size() < mDeviceProfile.numColumnsBase) {
-                count++;
-            } else {
-                count += info.mInfo.size() / mDeviceProfile.numColumnsBase;
+                mSectionHeaders.put(String.valueOf(mHeaderList.get(i).mStartString),
+                        new SectionIndices(sectionIndex, i));
+                sectionIndex++;
             }
         }
     }
@@ -400,6 +496,7 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         ArrayList<AppInfo> infos = getAllApps();
 
         mLauncher.mAppDrawer.getLayoutManager().removeAllViews();
+
         setApps(infos);
     }
 
@@ -537,7 +634,7 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         if (params instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) params;
             marginParams.setMargins(marginParams.leftMargin, marginParams.topMargin,
-                    marginParams.rightMargin, mDeviceProfile.iconTextSizePx);
+                    marginParams.rightMargin, marginParams.bottomMargin);
             holder.mTextView.setLayoutParams(marginParams);
         }
 
@@ -592,6 +689,7 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
         holder.mTextView.setPivotY(holder.mTextView.getHeight() / 2);
 
         final int size = indexedInfo.mInfo.size();
+
         for (int i = 0; i < holder.mLayout.getChildCount(); i++) {
             AppDrawerIconView icon = (AppDrawerIconView) holder.mLayout.getChildAt(i);
             icon.setLayoutParams(mIconParams);
@@ -741,12 +839,31 @@ public class AppDrawerListAdapter extends RecyclerView.Adapter<AppDrawerListAdap
 
     @Override
     public int getPositionForSection(int sectionIndex) {
-        return mSectionHeaders.get(getSections()[sectionIndex]);
+        return mSectionHeaders.get(getSections()[sectionIndex]).mItemIndex;
     }
 
     @Override
     public int getSectionForPosition(int position) {
-        return mSectionHeaders.get(mHeaderList.get(position).mStartString);
+        if (mSectionHeaders == null) {
+            return 0;
+        }
+
+        position = (position < 0) ? 0 : position;
+        position = (position > mHeaderList.size()) ? mHeaderList.size() : position;
+
+        int index = 0;
+        AppItemIndexedInfo info = mHeaderList.get(position);
+        if (info != null) {
+            SectionIndices indices = mSectionHeaders.get(info.mStartString);
+            if (indices != null) {
+                index = indices.mSectionIndex;
+            } else {
+                Log.w(TAG, "SectionIndices are null");
+            }
+        } else {
+            Log.w(TAG, "AppItemIndexedInfo is null");
+        }
+        return index;
     }
 
     private void filterProtectedApps(ArrayList<AppInfo> list) {

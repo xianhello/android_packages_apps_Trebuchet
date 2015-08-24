@@ -166,12 +166,12 @@ public class Folder extends LinearLayout implements DragSource, View.OnClickList
         mIconCache = app.getIconCache();
 
         Resources res = getResources();
-        mMaxCountX = (int) grid.numColumns;
+        mMaxCountX = (int) grid.numColumnsBase;
         // Allow scrolling folders when DISABLE_ALL_APPS is true.
         if (LauncherAppState.isDisableAllApps()) {
             mMaxCountY = mMaxNumItems = Integer.MAX_VALUE;
         } else {
-            mMaxCountY = (int) grid.numRows;
+            mMaxCountY = (int) grid.numRowsBase;
             mMaxNumItems = mMaxCountX * mMaxCountY;
         }
 
@@ -185,9 +185,7 @@ public class Folder extends LinearLayout implements DragSource, View.OnClickList
         if (sDefaultFolderName == null) {
             sDefaultFolderName = res.getString(R.string.folder_name);
         }
-        if (sHintText == null) {
-            sHintText = res.getString(R.string.folder_hint_text);
-        }
+        sHintText = res.getString(R.string.folder_hint_text);
         mLauncher = (Launcher) context;
         // We need this view to be focusable in touch mode so that when text editing of the folder
         // name is complete, we have something to focus on, thus hiding the cursor and giving

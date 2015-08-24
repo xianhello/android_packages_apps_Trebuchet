@@ -17,19 +17,19 @@
 -->
 <resources>
   <string-array name="transition_effect_entries">
-    <item>ללא</item>
-    <item>התקרבות</item>
-    <item>התרחקות</item>
-    <item>סובב למעלה</item>
-    <item>סובב למטה</item>
-    <item>קובייה פנימה</item>
-    <item>קוביה החוצה</item>
-    <item>מחסנית</item>
-    <item>אקורדיון</item>
-    <item>היפוך</item>
-    <item>גליל פנימה</item>
-    <item>גליל החוצה</item>
-    <item>קרוסלה</item>
-    <item>תקציר</item>
+    <item>Brez</item>
+    <item>Povečaj</item>
+    <item>Pomanjšaj</item>
+    <item>Zavrti gor</item>
+    <item>Zavrti dol</item>
+    <item>Kocka noter</item>
+    <item>Kocka ven</item>
+    <item>Zloži</item>
+    <item>Harmonika</item>
+    <item>Obrni</item>
+    <item>Valj noter</item>
+    <item>Valj ven</item>
+    <item>Vrtiljak</item>
+    <item>Pregled</item>
   </string-array>
 </resources>

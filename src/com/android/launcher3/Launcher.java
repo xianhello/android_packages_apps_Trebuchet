@@ -46,6 +46,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -2606,6 +2607,30 @@ public class Launcher extends Activity
         }
     }
 
+    /**
+     * This is used when starting widget config activities. Make sure to setWaitingForResult so that
+     * the ItemInfo for the pending item is properly saved.
+     *
+     * @param intent
+     * @param requestCode
+     * @param fillInIntent
+     * @param flagsMask
+     * @param flagsValues
+     * @param extraFlags
+     * @param options
+     * @throws IntentSender.SendIntentException
+     */
+    @Override
+    public void startIntentSenderForResult(IntentSender intent, int requestCode,
+        Intent fillInIntent, int flagsMask, int flagsValues, int extraFlags, Bundle options)
+            throws IntentSender.SendIntentException {
+        if (requestCode >= 0) {
+            setWaitingForResult(true);
+        }
+        super.startIntentSenderForResult(intent, requestCode, fillInIntent, flagsMask, flagsValues,
+                extraFlags, options);
+    }
+
     protected void moveToCustomContentScreen(boolean animate) {
         // Close any folders that may be open.
         closeFolder();
@@ -4308,7 +4333,11 @@ public class Launcher extends Activity
         if (resetPageToZero) {
             mAppsCustomizeTabHost.reset();
         }
-        mAppsCustomizeContent.sortApps();
+        if (mAppsCustomizeContent.getSortMode() != AppsCustomizePagedView.SortMode.Title) {
+            // optimize Title sort by not reinflating views every time we open the app drawer
+            // since we already sort based on new app installs and change of sort mode
+            mAppsCustomizeContent.sortApps();
+        }
         showAppsCustomizeHelper(animated, false, contentType);
         mAppsCustomizeTabHost.post(new Runnable() {
             @Override
@@ -5824,7 +5853,7 @@ public class Launcher extends Activity
         mGrid.layout(Launcher.this);
 
         // Synchronized reload
-        mModel.stopLoader(); //make sure the loader isn't running
+        mModel.resetLoadedState(true, true);
         mModel.startLoader(true, page);
         mWorkspace.updateCustomContentVisibility();
 

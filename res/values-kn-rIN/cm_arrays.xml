@@ -17,19 +17,19 @@
 -->
 <resources>
   <string-array name="transition_effect_entries">
-    <item>ללא</item>
-    <item>התקרבות</item>
-    <item>התרחקות</item>
-    <item>סובב למעלה</item>
-    <item>סובב למטה</item>
-    <item>קובייה פנימה</item>
-    <item>קוביה החוצה</item>
-    <item>מחסנית</item>
-    <item>אקורדיון</item>
-    <item>היפוך</item>
-    <item>גליל פנימה</item>
-    <item>גליל החוצה</item>
-    <item>קרוסלה</item>
-    <item>תקציר</item>
+    <item>ಶೂನ್ಯ</item>
+    <item>ಝೂಮ್ ಒಳಗೆ</item>
+    <item>ಝೂಮ್ ಹೊರಗೆ</item>
+    <item>ಮೇಲೆ ತಿರುಗಿಸು</item>
+    <item>ಕೆಳಗೆ ತಿರುಗಿಸು</item>
+    <item>ಕ್ಯೂಬ್ ಒಳಗೆ</item>
+    <item>ಕ್ಯೂಬ್ ಹೊರಗೆ</item>
+    <item>ಸ್ಟಾಕ್</item>
+    <item>ಅಕಾರ್ಡಿಯನ್</item>
+    <item>ಫ್ಲಿಪ್</item>
+    <item>ಸಿಲಿಂಡರ್ ಒಳಗೆ</item>
+    <item>ಸಿಲಿಂಡರ್ ಹೊರಗೆ</item>
+    <item>ಕರೋಸೆಲ್</item>
+    <item>ಅವಲೋಕನ</item>
   </string-array>
 </resources>
